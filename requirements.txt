@@ -1,0 +1,7 @@
+pycryptodome
+m3u8
+ffmpy
+beautifulsoup4
+asyncio
+aiohttp
+click
