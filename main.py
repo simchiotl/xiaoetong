@@ -4,6 +4,7 @@ import json
 import math
 import os
 from multiprocessing import Process, Queue
+from urllib.parse import urlparse, quote, parse_qs
 
 import aiohttp
 import click
@@ -43,6 +44,9 @@ class Xet(object):
         session = requests.Session()
         for key, value in self.configs['cookies'].items():
             session.cookies[key] = value
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+        })
         return session
 
     @staticmethod
@@ -66,9 +70,10 @@ class Xet(object):
             # bizData[product_id]: term_62d507c0a9420_Ng2t4Q
             'bizData[opr_sys]': 'MacIntel'
         }
-        self.session.headers.update(
-            {'Referer': 'https://{appid}.h5.xiaoeknow.com/p/course/{resourcetype}/{resourceid}'.format(
-                appid=self.configs['appid'], resourcetype=resourcetype, resourceid=resourceid)})
+        self.session.headers.update({
+            'Referer': 'https://{appid}.h5.xiaoeknow.com/p/course/{resourcetype}/{resourceid}'.format(
+                appid=self.configs['appid'], resourcetype=resourcetype, resourceid=resourceid)
+        })
         res = self.session.post(url, data=body)
         if res.status_code == 200:
             content = res.json()
@@ -233,6 +238,15 @@ class Xet(object):
         os.makedirs(resource_dir, exist_ok=True)
 
         url_info = self.decrypt_url(resource['video_urls'])
+        if 'ext' not in url_info or 'sign' not in url_info['url']:
+            param = resource['video_info']['video_audio_url'].split('?', maxsplit=1)[-1]
+            url = url_info['url']
+            if 'sign' not in url:
+                url_info['url'] = url + "?" + param
+            if 'ext' not in url_info:
+                host = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url))
+                path = "/".join(url.replace(host, '').split('/')[1:3])
+                url_info['ext'] = dict(host=host, path=path, param=param)
         playlist, segment_props, segments = self.parse_m3u8(url_info, resource['video_info']['resource_id'])
 
         kwargs = dict(url_prefix=playlist['url_prefix'], key=playlist['key'], nocache=nocache,
@@ -312,8 +326,8 @@ class Xet(object):
         if qq is not None:
             for worker in processes:
                 qq.put(None)
+            for worker in processes:
                 worker.join()
-                worker.terminate()
 
     def _list_sections(self, course_id, is_course):
         appid = self.configs['appid']
